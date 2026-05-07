@@ -1,6 +1,8 @@
 using NiumaCore.Config;
 using NiumaCore.Event;
 using NiumaCore.Input;
+using NiumaCore.Auth;
+using NiumaCore.Network;
 using NiumaCore.Save;
 
 namespace NiumaCore.Module
@@ -22,13 +24,25 @@ namespace NiumaCore.Module
         /// </summary>
         public IConfigService ConfigService { get; }
         /// <summary>
-        /// 保存服务
-        /// </summary>
-        public ISaveService SaveService { get; }
-        /// <summary>
         /// 输入阻止器，用于在特定情况下阻止玩家的输入，例如在对话框打开时阻止玩家的移动输入，在战斗中阻止玩家的技能输入等，以确保游戏逻辑的正确性和玩家体验的一致性
         /// </summary>
         public IGameplayInputBlocker GameplayInputBlocker { get; }
+
+        /// <summary>
+        /// 网络客户端。用于登录、云存档、排行榜等需要请求后端的模块。
+        /// </summary>
+        public INetworkClient NetworkClient { get; }
+
+        /// <summary>
+        /// 认证服务。用于账号登录、Token 刷新和登出。
+        /// </summary>
+        public IAuthService AuthService { get; }
+
+        /// <summary>
+        /// 高层存档服务。
+        /// 业务模块通过该入口保存和加载，不直接依赖本地存档或云存档底层服务。
+        /// </summary>
+        public ISaveService SaveService { get; }
 
         /// <summary>
         /// 构造函数，接受游戏上下文所需的核心服务和资源作为参数，并将它们赋值给相应的属性，以便模块可以通过游戏上下文访问这些服务和资源
@@ -37,12 +51,16 @@ namespace NiumaCore.Module
             IEventBus eventBus,
             IConfigService configService = null,
             ISaveService saveService = null,
-            IGameplayInputBlocker gameplayInputBlocker = null)
+            IGameplayInputBlocker gameplayInputBlocker = null,
+            INetworkClient networkClient = null,
+            IAuthService authService = null)
         {
             EventBus = eventBus;
             ConfigService = configService;
             SaveService = saveService;
             GameplayInputBlocker = gameplayInputBlocker;
+            NetworkClient = networkClient;
+            AuthService = authService;
         }
     }
 }

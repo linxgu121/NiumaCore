@@ -1,27 +1,47 @@
+using System.Threading;
+using System.Threading.Tasks;
+
 namespace NiumaCore.Save
 {
     /// <summary>
-    /// 定义保存服务接口，用于管理游戏的保存和加载功能
-    /// 保存服务负责处理游戏数据的持久化，包括保存当前游戏状态、加载之前保存的游戏状态以及标记游戏状态为脏以便在需要时进行保存等功能，以确保玩家的游戏进度能够被正确地保存和恢复
+    /// 高层存档服务接口。
+    /// 普通业务模块只依赖这个协调入口，不直接关心本地存档、云存档和冲突处理的内部组合方式。
     /// </summary>
     public interface ISaveService
     {
         /// <summary>
-        /// 当前保存的数据对象，允许模块访问当前的保存数据，以便在需要时进行读取或修改，例如在保存游戏时更新当前的保存数据，在加载游戏时获取当前的保存数据等
+        /// 保存指定载荷。
+        /// 存档槽 ID 以 payload.Metadata.SlotId 为准，避免方法参数与元数据不一致。
+        /// 是否只写本地、是否同时上传云端，由 writeMode 明确表达。
         /// </summary>
-        object CurrentSave { get; }
+        Task<SaveOperationResult> SaveAsync(
+            SavePayload payload,
+            SaveWriteMode writeMode = SaveWriteMode.LocalOnly,
+            CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// 保存游戏，允许模块在需要时触发保存操作，例如在玩家手动保存游戏时触发保存，在游戏自动保存时触发保存等，以确保玩家的游戏进度能够被正确地保存和恢复
+        /// 从指定存档槽加载存档。
+        /// 读取本地、读取云端或本地优先等策略由 readMode 明确表达。
         /// </summary>
-        void SaveGame();
+        Task<SaveLoadResult> LoadAsync(
+            string slotId,
+            SaveReadMode readMode = SaveReadMode.LocalFirst,
+            CancellationToken cancellationToken = default);
+
         /// <summary>
-        /// 加载游戏，接受一个保存ID参数，允许模块根据保存ID来加载对应的游戏状态，例如在玩家选择加载游戏时根据保存ID来加载对应的游戏状态，在游戏自动加载时根据默认的保存ID来加载游戏状态等，以确保玩家能够正确地恢复之前的游戏进度
+        /// 标记指定存档槽存在未保存变更。
+        /// 如果该标记会影响崩溃恢复或自动保存，实现层应该将脏标记持久化。
         /// </summary>
-        void LoadGame(string saveId);
+        Task MarkDirtyAsync(string slotId, CancellationToken cancellationToken = default);
+
         /// <summary>
-        /// 标记保存数据为脏，允许模块在需要时触发保存操作，例如在游戏数据发生变化时标记保存数据为脏，在游戏自动保存时触发保存等，以确保玩家的游戏进度能够被正确地保存和恢复
+        /// 清除指定存档槽的脏标记。
         /// </summary>
-        void MarkDirty(string reason);
+        Task ClearDirtyAsync(string slotId, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// 查询指定存档槽是否存在未保存变更。
+        /// </summary>
+        Task<bool> IsDirtyAsync(string slotId, CancellationToken cancellationToken = default);
     }
 }
