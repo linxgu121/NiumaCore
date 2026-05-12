@@ -13,15 +13,49 @@ namespace NiumaCore.Event
     /// </summary>
     public sealed class SimpleEventBus : IEventBus
     {
+        private readonly struct QueuedEvent
+        {
+            public readonly Action Dispatch;
+
+            public QueuedEvent(Action dispatch)
+            {
+                Dispatch = dispatch;
+            }
+        }
+
         /// <summary>
         /// 事件处理器字典，键为事件类型，值为对应的事件处理器委托
         /// </summary>
         private readonly Dictionary<Type, Delegate> _handlers = new();
 
         /// <summary>
+        /// 延迟事件队列。用于把非关键即时事件推迟到统一时机派发，避免一帧内事件链过深。
+        /// </summary>
+        private readonly Queue<QueuedEvent> _deferredEvents = new();
+
+        /// <summary>
         /// 发布事件，允许模块将事件发送到事件总线，其他订阅了该事件类型的模块将会收到通知并执行相应的处理逻辑
         /// </summary>
         public void Publish<T>(T evt)
+        {
+            Publish(evt, EventChannel.Immediate);
+        }
+
+        /// <summary>
+        /// 按指定信道发布事件。Immediate 立即同步派发，Deferred 进入延迟队列等待 DrainDeferred。
+        /// </summary>
+        public void Publish<T>(T evt, EventChannel channel)
+        {
+            if (channel == EventChannel.Deferred)
+            {
+                _deferredEvents.Enqueue(new QueuedEvent(() => Dispatch(evt)));
+                return;
+            }
+
+            Dispatch(evt);
+        }
+
+        private void Dispatch<T>(T evt)
         {
             if (_handlers.TryGetValue(typeof(T), out var del))
             {
@@ -59,6 +93,21 @@ namespace NiumaCore.Event
                 _handlers.Remove(type);
             else
                 _handlers[type] = current;
+        }
+
+        /// <summary>
+        /// 派发延迟队列中的事件。
+        /// maxEvents 用于限制单帧最多处理数量，避免延迟事件过多时卡住主线程。
+        /// </summary>
+        public void DrainDeferred(int maxEvents = int.MaxValue)
+        {
+            var processed = 0;
+            while (_deferredEvents.Count > 0 && processed < maxEvents)
+            {
+                var queuedEvent = _deferredEvents.Dequeue();
+                queuedEvent.Dispatch?.Invoke();
+                processed++;
+            }
         }
     }
 }

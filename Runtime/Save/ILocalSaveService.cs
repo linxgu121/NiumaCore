@@ -16,10 +16,10 @@ namespace NiumaCore.Save
         Task<bool> ExistsAsync(string slotId, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// 保存载荷到本地。
+        /// 保存载荷到本地，并返回本地写入结果。
         /// 存档槽 ID 以 payload.Metadata.SlotId 为准，避免参数与元数据不一致。
         /// </summary>
-        Task SaveAsync(SavePayload payload, CancellationToken cancellationToken = default);
+        Task<SaveOperationResult> SaveAsync(SavePayload payload, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 从本地读取指定存档槽。
@@ -30,6 +30,16 @@ namespace NiumaCore.Save
         /// 删除指定本地存档槽。
         /// </summary>
         Task<bool> DeleteAsync(string slotId, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// 复制本地存档槽。
+        /// 用于检查点轮替和逻辑防覆盖备份；只处理本地文件，不参与云同步。
+        /// </summary>
+        Task<bool> CopyAsync(
+            string sourceSlotId,
+            string destinationSlotId,
+            bool overwrite = true,
+            CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 获取本地存档槽列表。

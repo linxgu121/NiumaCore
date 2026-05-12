@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using NiumaCore.Config;
 using NiumaCore.Event;
 using NiumaCore.Input;
@@ -15,6 +17,8 @@ namespace NiumaCore.Module
     /// </summary>
     public sealed class GameContext
     {
+        private readonly Dictionary<Type, object> _services = new();
+
         /// <summary>
         /// 事件总线
         /// </summary>
@@ -45,7 +49,8 @@ namespace NiumaCore.Module
         public ISaveService SaveService { get; }
 
         /// <summary>
-        /// 构造函数，接受游戏上下文所需的核心服务和资源作为参数，并将它们赋值给相应的属性，以便模块可以通过游戏上下文访问这些服务和资源
+        /// 兼容旧代码的构造函数。
+        /// 后续新增服务和能力接口时，优先使用 GameContext.Builder，避免构造函数参数持续膨胀。
         /// </summary>
         public GameContext(
             IEventBus eventBus,
@@ -61,6 +66,165 @@ namespace NiumaCore.Module
             GameplayInputBlocker = gameplayInputBlocker;
             NetworkClient = networkClient;
             AuthService = authService;
+
+            RegisterCoreServices();
+        }
+
+        private GameContext(Builder builder)
+        {
+            EventBus = builder.EventBus;
+            ConfigService = builder.ConfigService;
+            SaveService = builder.SaveService;
+            GameplayInputBlocker = builder.GameplayInputBlocker;
+            NetworkClient = builder.NetworkClient;
+            AuthService = builder.AuthService;
+
+            RegisterCoreServices();
+
+            foreach (var pair in builder.Services)
+            {
+                _services[pair.Key] = pair.Value;
+            }
+        }
+
+        /// <summary>
+        /// 创建 GameContext 构建器。
+        /// 新模块需要暴露查询、命令、生命周期等能力接口时，应通过 Builder.WithService 注册，避免继续扩展构造函数参数。
+        /// </summary>
+        public static Builder CreateBuilder()
+        {
+            return new Builder();
+        }
+
+        /// <summary>
+        /// 注册一个可选服务或能力接口。
+        /// 例如后期任务模块可以注册 IQuestQuery、IQuestCommand、IQuestLifecycle，而不是把所有能力塞进一个 IQuestService。
+        /// </summary>
+        public void RegisterService<T>(T service) where T : class
+        {
+            if (service == null)
+            {
+                _services.Remove(typeof(T));
+                return;
+            }
+
+            _services[typeof(T)] = service;
+        }
+
+        /// <summary>
+        /// 尝试获取某个服务或能力接口。
+        /// 调用方应依赖自己真正需要的能力接口，例如 UI 只依赖查询接口，剧情只依赖命令接口。
+        /// </summary>
+        public bool TryGetService<T>(out T service) where T : class
+        {
+            if (_services.TryGetValue(typeof(T), out var value) && value is T typed)
+            {
+                service = typed;
+                return true;
+            }
+
+            service = null;
+            return false;
+        }
+
+        /// <summary>
+        /// 获取某个服务或能力接口。不存在时返回 null。
+        /// </summary>
+        public T GetService<T>() where T : class
+        {
+            return TryGetService<T>(out var service) ? service : null;
+        }
+
+        /// <summary>
+        /// 统一派发延迟事件。
+        /// 应由全局模块启动器在所有模块 Tick 完成后调用，不要放到某一个功能模块内部调用，避免表现事件插入业务逻辑中途造成时序混乱。
+        /// </summary>
+        public void DrainDeferredEvents(int maxEvents = int.MaxValue)
+        {
+            EventBus?.DrainDeferred(maxEvents);
+        }
+
+        private void RegisterCoreServices()
+        {
+            RegisterService(EventBus);
+            RegisterService(ConfigService);
+            RegisterService(SaveService);
+            RegisterService(GameplayInputBlocker);
+            RegisterService(NetworkClient);
+            RegisterService(AuthService);
+        }
+
+        /// <summary>
+        /// GameContext 构建器。
+        /// 用于在模块越来越多时保持上下文创建代码可维护，并为能力接口拆分预留插槽。
+        /// </summary>
+        public sealed class Builder
+        {
+            internal readonly Dictionary<Type, object> Services = new();
+
+            internal IEventBus EventBus { get; private set; }
+            internal IConfigService ConfigService { get; private set; }
+            internal ISaveService SaveService { get; private set; }
+            internal IGameplayInputBlocker GameplayInputBlocker { get; private set; }
+            internal INetworkClient NetworkClient { get; private set; }
+            internal IAuthService AuthService { get; private set; }
+
+            public Builder WithEventBus(IEventBus eventBus)
+            {
+                EventBus = eventBus;
+                return WithService(eventBus);
+            }
+
+            public Builder WithConfigService(IConfigService configService)
+            {
+                ConfigService = configService;
+                return WithService(configService);
+            }
+
+            public Builder WithSaveService(ISaveService saveService)
+            {
+                SaveService = saveService;
+                return WithService(saveService);
+            }
+
+            public Builder WithGameplayInputBlocker(IGameplayInputBlocker gameplayInputBlocker)
+            {
+                GameplayInputBlocker = gameplayInputBlocker;
+                return WithService(gameplayInputBlocker);
+            }
+
+            public Builder WithNetworkClient(INetworkClient networkClient)
+            {
+                NetworkClient = networkClient;
+                return WithService(networkClient);
+            }
+
+            public Builder WithAuthService(IAuthService authService)
+            {
+                AuthService = authService;
+                return WithService(authService);
+            }
+
+            /// <summary>
+            /// 注册额外服务或能力接口。
+            /// 同一个实现对象可以用不同接口注册多次，例如同时注册 IQuestQuery 和 IQuestCommand。
+            /// </summary>
+            public Builder WithService<T>(T service) where T : class
+            {
+                if (service == null)
+                {
+                    Services.Remove(typeof(T));
+                    return this;
+                }
+
+                Services[typeof(T)] = service;
+                return this;
+            }
+
+            public GameContext Build()
+            {
+                return new GameContext(this);
+            }
         }
     }
 }
