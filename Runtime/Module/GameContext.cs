@@ -112,6 +112,15 @@ namespace NiumaCore.Module
         }
 
         /// <summary>
+        /// 注销指定服务或能力接口。
+        /// 模块销毁、初始化回滚或场景切换时应优先使用该显式接口，不要用 RegisterService(null) 表达注销语义。
+        /// </summary>
+        public bool UnregisterService<T>() where T : class
+        {
+            return _services.Remove(typeof(T));
+        }
+
+        /// <summary>
         /// 尝试获取某个服务或能力接口。
         /// 调用方应依赖自己真正需要的能力接口，例如 UI 只依赖查询接口，剧情只依赖命令接口。
         /// </summary>
